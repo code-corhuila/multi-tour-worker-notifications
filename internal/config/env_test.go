@@ -44,6 +44,7 @@ func TestU_config_names_the_bad_variable(t *testing.T) {
 		{"port too big", func(e map[string]string) { e["SMTP_PORT"] = "70000" }, "SMTP_PORT"},
 		{"no sender", func(e map[string]string) { delete(e, "SMTP_FROM") }, "SMTP_FROM"},
 		{"sender not an address", func(e map[string]string) { e["SMTP_FROM"] = "not an address" }, "SMTP_FROM"},
+		{"sender with a display name", func(e map[string]string) { e["SMTP_FROM"] = "Multitour <no-reply@multitour.local>" }, "SMTP_FROM"},
 		{"user without password", func(e map[string]string) { e["SMTP_USER"] = "u" }, "SMTP_PASSWORD"},
 		{"password without user", func(e map[string]string) { e["SMTP_PASSWORD"] = "p" }, "SMTP_USER"},
 		{"tls flag text", func(e map[string]string) { e["SMTP_REQUIRE_TLS"] = "maybe" }, "SMTP_REQUIRE_TLS"},
