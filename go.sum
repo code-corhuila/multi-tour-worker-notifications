@@ -1,2 +1,4 @@
 github.com/code-corhuila/multi-tour-worker-runtime v0.0.0-20261011134524-1c8304fcaf34 h1:V+kxqs7wMl9ViSxGwGP8MayZtWohmplMYOsRCwboPa8=
 github.com/code-corhuila/multi-tour-worker-runtime v0.0.0-20261011134524-1c8304fcaf34/go.mod h1:hXsmU9eldJP+z6ZzRaYp1lIU9g+Gp2OH7A7eAk5FgPY=
+github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=
+github.com/golang-jwt/jwt/v5 v5.3.1/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
