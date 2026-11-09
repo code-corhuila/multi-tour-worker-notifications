@@ -23,3 +23,24 @@ branch into another: `merge develop -> qa` and `merge qa -> main` do not exist i
 rule.
 
 Full policy: `00-governance/branching-policy.md` in `multi-tour-docs`.
+
+## What it does
+
+Job 4 sends the business e-mail of the platform. It has no schedule: job 7 (`multi-tour-worker-event-relay`) delivers the notification events to its internal routes, and it turns each into an e-mail over SMTP (ADR-004 D3, D10). It has no database and calls no domain; a failed send never changes business state. The first notice is the one of a reset administrative password (HU-WRK-004, spec `001-hu-wrk-004-send-the-password-reset-notice` in `multi-tour-docs`).
+
+## Variables
+
+See `.env.example`; every variable is read at start and a bad one stops the worker naming it.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SMTP_HOST`, `SMTP_PORT` | none, required | The SMTP server |
+| `SMTP_FROM` | none, required | The one platform address; the visible name of the sender is the tenant's |
+| `SMTP_USER`, `SMTP_PASSWORD` | empty | Both or neither; the password is a secret, never versioned |
+| `SMTP_REQUIRE_TLS` | `true` | Outside development the connection must be TLS; only Mailpit in development turns it off |
+| `SMTP_TIMEOUT` | `10s` | Time allowed to one send |
+| `HTTP_ADDR` | `:8080` | Where `/health` listens |
+
+## Development
+
+Mailpit receives every e-mail and sends none. The root composition (`multi-tour-infra-postgres`) already declares it, with the profile `mail-capture`, for the security service; this worker's `deploy/compose.yml` does not declare a second one. Run the tests with `go test ./...`; the integration test against Mailpit runs only when `MAILPIT_URL` is set (the CI sets it).
