@@ -43,6 +43,7 @@ jobs:
           SMTP_HOST: mailpit
           SMTP_PORT: "1025"
           SMTP_FROM: no-reply@multitour.local
+          JWT_PUBLIC_KEY: ci-placeholder
       # Catches a base image tag that does not exist; nothing is pushed
       - name: docker build
         run: docker build -f deploy/Dockerfile .
