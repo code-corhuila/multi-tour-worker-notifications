@@ -187,6 +187,22 @@ func TestC_the_message_reaches_the_server_with_the_tenant_name_as_visible_sender
 	}
 }
 
+// The recipient ends in a header: whatever is not one bare address is refused before any connection is made.
+func TestC_a_recipient_that_could_add_a_header_is_refused(t *testing.T) {
+	srv := startServer(t, nil, false)
+	crlf := string(rune(13)) + string(rune(10))
+	for _, to := range []string{"a@b.test" + crlf + "Bcc: x@y.test", "Owner <owner@acme.test>", ""} {
+		m := message()
+		m.To = to
+		if err := newMailer(srv.port(), false, nil).Send(context.Background(), m); err == nil {
+			t.Fatalf("recipient %q was accepted", to)
+		}
+	}
+	if srv.mailFrom != "" {
+		t.Fatal("a connection was used for a refused recipient")
+	}
+}
+
 // AC-WK4-01.2 and RN-WK4-01: a server that refuses the recipient is an error, so the route answers 5xx.
 func TestC_a_refused_recipient_is_an_error(t *testing.T) {
 	srv := startServer(t, nil, true)

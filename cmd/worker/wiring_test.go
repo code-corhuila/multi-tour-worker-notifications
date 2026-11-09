@@ -64,9 +64,15 @@ func TestC_the_key_comes_inline_or_from_a_file_and_the_handler_serves_health_and
 			}
 			srv := httptest.NewServer(h)
 			defer srv.Close()
-			health, _ := http.Get(srv.URL + "/health")
+			health, err := http.Get(srv.URL + "/health")
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer health.Body.Close()
-			unsigned, _ := http.Post(srv.URL+"/api/v1/notifications/internal/events", "application/json", strings.NewReader("{}"))
+			unsigned, err := http.Post(srv.URL+"/api/v1/notifications/internal/events", "application/json", strings.NewReader("{}"))
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer unsigned.Body.Close()
 			if health.StatusCode != http.StatusOK || unsigned.StatusCode != http.StatusUnauthorized {
 				t.Fatalf("health %d, unsigned call %d, want 200 and 401", health.StatusCode, unsigned.StatusCode)
