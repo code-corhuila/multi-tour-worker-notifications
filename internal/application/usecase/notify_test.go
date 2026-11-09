@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/code-corhuila/multi-tour-worker-notifications/internal/application/port/out"
@@ -107,6 +108,10 @@ func TestA_unknown_type_or_missing_email_is_an_error_not_a_loss(t *testing.T) {
 		{"unknown type", usecase.Event{ID: "e6", Type: "ReservationCreated", Payload: []byte(`{}`)}, usecase.ErrUnknownType},
 		{"no email", resetEvent("e7", `{"roles":["TENANT_ADMINISTRATOR"],"resetAt":"2026-11-09T13:05:00Z"}`), usecase.ErrInvalidPayload},
 		{"malformed json", resetEvent("e8", `{"roles":`), usecase.ErrInvalidPayload},
+		{"empty event id", resetEvent("", adminPayload), usecase.ErrInvalidPayload},
+		{"recipient is not a bare address", resetEvent("e11", `{"email":"Owner <owner@acme.test>","tenantName":"Acme","roles":["TENANT_ADMINISTRATOR"],"resetAt":"2026-11-09T13:05:00Z"}`), usecase.ErrInvalidPayload},
+		{"header injection in the recipient", resetEvent("e12", `{"email":"a@b.test\r\nBcc: x@y.test","tenantName":"Acme","roles":["TENANT_ADMINISTRATOR"],"resetAt":"2026-11-09T13:05:00Z"}`), usecase.ErrInvalidPayload},
+		{"header injection in the tenant name", resetEvent("e13", `{"email":"a@b.test","tenantName":"Acme\r\nBcc: x@y.test","roles":["TENANT_ADMINISTRATOR"],"resetAt":"2026-11-09T13:05:00Z"}`), usecase.ErrInvalidPayload},
 		{"no reset time", resetEvent("e9", `{"email":"a@b.test","roles":["TENANT_ADMINISTRATOR"]}`), usecase.ErrInvalidPayload},
 	}
 	for _, tc := range cases {
@@ -131,5 +136,23 @@ func TestA_extra_fields_of_the_payload_never_reach_the_email(t *testing.T) {
 		if strings.Contains(m.sent[0].HTMLBody, leaked) || strings.Contains(m.sent[0].Subject, leaked) {
 			t.Fatalf("%q reached the e-mail", leaked)
 		}
+	}
+}
+
+// The same event delivered at the same time (a retry of job 7 overlapping a slow send) still sends one e-mail.
+func TestA_the_same_event_at_the_same_time_sends_one_email(t *testing.T) {
+	m := &fakeMailer{}
+	n := newNotify(m)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = n.Handle(context.Background(), resetEvent("e14", adminPayload))
+		}()
+	}
+	wg.Wait()
+	if len(m.sent) != 1 {
+		t.Fatalf("%d e-mails sent for one event, want 1", len(m.sent))
 	}
 }
