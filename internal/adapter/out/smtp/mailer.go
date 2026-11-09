@@ -19,8 +19,6 @@ import (
 	"github.com/code-corhuila/multi-tour-worker-notifications/internal/application/port/out"
 )
 
-const defaultTimeout = 10 * time.Second
-
 // Config is what the adapter needs; it knows nothing of the environment.
 type Config struct {
 	Host, From, User, Password string
@@ -28,7 +26,7 @@ type Config struct {
 	// RequireTLS makes STARTTLS mandatory: a server that does not offer it, or whose certificate does not check out, gets
 	// nothing. It is true outside development; only Mailpit in development turns it off (ADR-004 D3).
 	RequireTLS bool
-	// Timeout bounds the whole send, connection and conversation included.
+	// Timeout bounds the whole send, connection and conversation included. It must be positive (the configuration guarantees it).
 	Timeout time.Duration
 	// TLSConfig replaces the default (the system roots, the host name checked, TLS 1.2 at least); a test gives its own roots.
 	TLSConfig *tls.Config
@@ -48,11 +46,11 @@ func (m *Mailer) Send(ctx context.Context, msg out.Message) error {
 	if err != nil {
 		return err
 	}
-	timeout := m.cfg.Timeout
-	if timeout <= 0 {
-		timeout = defaultTimeout
+	// The configuration guarantees a positive timeout (SMTP_TIMEOUT); without one every send would be cut at once.
+	if m.cfg.Timeout <= 0 {
+		return errors.New("the smtp timeout must be positive")
 	}
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(m.cfg.Timeout)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}

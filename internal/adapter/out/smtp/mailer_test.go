@@ -187,6 +187,19 @@ func TestC_the_message_reaches_the_server_with_the_tenant_name_as_visible_sender
 	}
 }
 
+// A timeout of zero would cut every send at once: it is refused loudly, and the configuration guarantees a positive one.
+func TestU_a_timeout_that_is_not_positive_is_refused(t *testing.T) {
+	srv := startServer(t, nil, false)
+	m := smtpout.New(smtpout.Config{Host: "127.0.0.1", Port: srv.port(), From: "no-reply@multitour.local"})
+	err := m.Send(context.Background(), message())
+	if err == nil || !strings.Contains(err.Error(), "timeout") {
+		t.Fatalf("error %v, want it to name the timeout", err)
+	}
+	if srv.mailFrom != "" {
+		t.Fatal("a connection was used with no timeout")
+	}
+}
+
 // The recipient ends in a header: whatever is not one bare address is refused before any connection is made.
 func TestC_a_recipient_that_could_add_a_header_is_refused(t *testing.T) {
 	srv := startServer(t, nil, false)

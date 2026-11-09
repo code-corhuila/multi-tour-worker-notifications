@@ -1,6 +1,7 @@
 package httpin_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -56,7 +57,12 @@ func (f *fakeNotifier) Handle(_ context.Context, e usecase.Event) (usecase.Outco
 
 func newServer(t *testing.T, n *fakeNotifier) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(httpin.New(n, httpin.NewVerifier(&signer.PublicKey, issuer, audience), slog.New(slog.NewJSONHandler(io.Discard, nil))))
+	return newServerLogging(t, n, io.Discard)
+}
+
+func newServerLogging(t *testing.T, n *fakeNotifier, log io.Writer) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(httpin.New(n, httpin.NewVerifier(&signer.PublicKey, issuer, audience), slog.New(slog.NewJSONHandler(log, nil))))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -142,7 +148,7 @@ func TestC_health_answers(t *testing.T) {
 }
 
 // AC-WK4-01.1
-func TestC_event_sends_one_email_and_answers_201(t *testing.T) {
+func TestC_admin_reset_sends_one_email_and_answers_201(t *testing.T) {
 	n := &fakeNotifier{outcome: usecase.Sent}
 	srv := newServer(t, n)
 	res := post(t, tenantRoute(srv), serviceToken(t), envelope)
@@ -185,7 +191,7 @@ func TestC_the_route_without_tenant_takes_an_event_of_no_tenant(t *testing.T) {
 }
 
 // AC-WK4-01.3, RN-WK4-01: the answer is a 5xx, so job 7 retries; the text of the failure never leaves the worker.
-func TestC_smtp_failure_answers_5xx_and_changes_nothing(t *testing.T) {
+func TestC_smtp_failure_answers_5xx(t *testing.T) {
 	srv := newServer(t, &fakeNotifier{err: fmt.Errorf("send: %w", errors.New("dial tcp 10.1.2.3:25: refused"))})
 	res := post(t, tenantRoute(srv), serviceToken(t), envelope, "X-Correlation-Id", "c0ffee00-0000-4000-8000-000000000001")
 	if res.StatusCode != http.StatusBadGateway {
@@ -194,6 +200,16 @@ func TestC_smtp_failure_answers_5xx_and_changes_nothing(t *testing.T) {
 	e := decodeError(t, res)
 	if strings.Contains(e.Message, "10.1.2.3") || e.TraceID != "c0ffee00-0000-4000-8000-000000000001" {
 		t.Fatalf("envelope %+v leaks the failure or lost the trace id", e)
+	}
+}
+
+// A server may repeat the recipient in its reply ("550 no such user owner@acme.test"): the log keeps the cause but not the address.
+func TestC_the_log_of_a_failed_send_keeps_no_e_mail_address(t *testing.T) {
+	var logged bytes.Buffer
+	srv := newServerLogging(t, &fakeNotifier{err: errors.New("smtp RCPT: 550 no such user owner@acme.test")}, &logged)
+	post(t, tenantRoute(srv), serviceToken(t), envelope)
+	if strings.Contains(logged.String(), "owner@acme.test") || !strings.Contains(logged.String(), "no such user") {
+		t.Fatalf("the log should keep the cause without the address: %s", logged.String())
 	}
 }
 
