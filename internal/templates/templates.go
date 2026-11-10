@@ -5,8 +5,10 @@ package templates
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,6 +19,7 @@ var files embed.FS
 var (
 	passwordReset   = template.Must(template.ParseFS(files, "password_reset.html"))
 	emergencyAccess = template.Must(template.ParseFS(files, "emergency_access.html"))
+	clientNotice    = template.Must(template.ParseFS(files, "client_notice.html"))
 )
 
 // colombia has no daylight saving, so a fixed offset is exact and needs no tzdata in the image.
@@ -100,4 +103,67 @@ func EmergencyNotice(d EmergencyNoticeData) (subject, body string, err error) {
 		return "", "", fmt.Errorf("render emergency access notice: %w", err)
 	}
 	return title, b.String(), nil
+}
+
+// ErrUnknownNotice is the answer for a type of customer notice that has no text.
+var ErrUnknownNotice = errors.New("no text for this type of customer notice")
+
+// noticeTexts are the eight types of notice of RF-019 (HU-COM-015): the subject, the sentence that says what happened and the one that says what
+// follows. None of them shows the free-text reason of a rejection (DP-15-03), a credential or a link.
+var noticeTexts = map[string]struct{ subject, headline, next string }{
+	"PROOF_APPROVED":                    {"Aprobamos tu comprobante de pago", "Tu comprobante de pago fue aprobado.", "No tienes que hacer nada más por ahora."},
+	"PROOF_REJECTED":                    {"No pudimos aprobar tu comprobante de pago", "Revisamos tu comprobante de pago y no pudimos aprobarlo.", "Si el plazo de pago sigue vigente, puedes presentar un nuevo comprobante."},
+	"RESERVATION_CONFIRMED":             {"Tu reserva está confirmada", "Tu reserva está confirmada.", "Gracias por tu pago. Te esperamos en la salida."},
+	"RESERVATION_CANCELLED_NON_PAYMENT": {"Cancelamos tu reserva por falta de pago", "Cancelamos tu reserva por falta de pago.", "Si todavía quieres viajar, puedes hacer una nueva reserva."},
+	"REFUND_PROCESSED":                  {"Procesamos tu reembolso", "Procesamos el reembolso de tu reserva.", "El tiempo en que lo ves reflejado depende de tu medio de pago."},
+	"CREDIT_BALANCE_RECORDED":           {"Registramos un saldo a tu favor", "Registramos un saldo a tu favor por tu reserva.", "Puedes usarlo en una próxima reserva."},
+	"DEPARTURE_CANCELLED":               {"Se canceló la salida de tu reserva", "Se canceló la salida de tu reserva por una causa ajena a ti.", "Nos comunicaremos contigo para ofrecerte una alternativa."},
+	"RESCHEDULING_PROPOSED":             {"Te proponemos reprogramar tu salida", "Te proponemos reprogramar tu salida.", "Cuéntanos si aceptas la nueva fecha."},
+}
+
+// ClientNoticeData is all a customer notice shows; an absent amount, balance, tour or departure is left out of the body.
+type ClientNoticeData struct {
+	Type                string
+	RecipientName       string
+	TourName            string
+	DepartureStartsAt   time.Time
+	AmountCents         *int64
+	PendingBalanceCents *int64
+}
+
+// ClientNotice renders the notice of a customer: its subject and its HTML body.
+func ClientNotice(d ClientNoticeData) (subject, body string, err error) {
+	text, ok := noticeTexts[d.Type]
+	if !ok {
+		return "", "", fmt.Errorf("%w: %q", ErrUnknownNotice, d.Type)
+	}
+	view := struct{ Name, Headline, Next, Tour, Departure, Amount, Balance string }{
+		Name: d.RecipientName, Headline: text.headline, Next: text.next, Tour: d.TourName, Amount: pesos(d.AmountCents), Balance: pesos(d.PendingBalanceCents),
+	}
+	if !d.DepartureStartsAt.IsZero() {
+		view.Departure = d.DepartureStartsAt.In(colombia).Format("02/01/2006 15:04")
+	}
+	var b bytes.Buffer
+	if err := clientNotice.Execute(&b, view); err != nil {
+		return "", "", fmt.Errorf("render customer notice: %w", err)
+	}
+	return text.subject, b.String(), nil
+}
+
+// pesos writes an amount in cents as $1.250.000 (the dot of the thousands, the comma of the cents only when there are cents); empty when absent.
+func pesos(cents *int64) string {
+	if cents == nil {
+		return ""
+	}
+	whole, digits := strconv.FormatInt(*cents/100, 10), ""
+	for i, c := range whole {
+		if i > 0 && (len(whole)-i)%3 == 0 {
+			digits += "."
+		}
+		digits += string(c)
+	}
+	if rest := *cents % 100; rest != 0 {
+		return fmt.Sprintf("$%s,%02d", digits, rest)
+	}
+	return "$" + digits
 }

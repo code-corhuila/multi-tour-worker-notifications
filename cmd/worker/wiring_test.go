@@ -80,3 +80,13 @@ func TestC_the_key_comes_inline_or_from_a_file_and_the_handler_serves_health_and
 		})
 	}
 }
+
+// HU-COM-015: with the address of commercial-reservation and the service token the worker starts with the content reader.
+func TestC_the_worker_starts_with_the_content_reader_of_the_client_notices(t *testing.T) {
+	cfg := baseConfig()
+	cfg.JWTPublicKey = publicKeyPEM(t)
+	cfg.CommercialReservationURL, cfg.ServiceToken = "http://api-commercial-reservation:8080", "svc-token"
+	if _, err := newHandler(cfg, quiet); err != nil {
+		t.Fatal(err)
+	}
+}

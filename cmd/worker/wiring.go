@@ -7,6 +7,7 @@ import (
 	"os"
 
 	httpin "github.com/code-corhuila/multi-tour-worker-notifications/internal/adapter/in/http"
+	"github.com/code-corhuila/multi-tour-worker-notifications/internal/adapter/out/reservation"
 	smtpout "github.com/code-corhuila/multi-tour-worker-notifications/internal/adapter/out/smtp"
 	"github.com/code-corhuila/multi-tour-worker-notifications/internal/application/usecase"
 	"github.com/code-corhuila/multi-tour-worker-notifications/internal/config"
@@ -31,5 +32,8 @@ func newHandler(cfg config.Notifications, log *slog.Logger) (http.Handler, error
 	mailer := smtpout.New(smtpout.Config{Host: cfg.SMTPHost, Port: cfg.SMTPPort, From: cfg.SMTPFrom, User: cfg.SMTPUser,
 		Password: cfg.SMTPPassword.Reveal(), RequireTLS: cfg.RequireTLS, Timeout: cfg.SMTPTimeout})
 	notify := usecase.NewNotify(mailer, log)
+	if cfg.CommercialReservationURL != "" {
+		notify.WithNotices(reservation.New(cfg.CommercialReservationURL, cfg.ServiceToken))
+	}
 	return httpin.New(notify, httpin.NewVerifier(key, cfg.JWTIssuer, cfg.JWTAudience), log), nil
 }

@@ -87,3 +87,35 @@ func TestU_tls_is_turned_off_only_on_purpose(t *testing.T) {
 		t.Fatalf("err=%v tls=%v, want tls off", err, c.RequireTLS)
 	}
 }
+
+// HU-COM-015: job 4 reads the content of a customer notice from commercial-reservation with its service token. Both variables come
+// together, or neither (the notices of a reset and of an emergency access need neither).
+func TestU_the_content_reader_variables_come_together_or_not_at_all(t *testing.T) {
+	c, err := load(valid())
+	if err != nil || c.CommercialReservationURL != "" || c.ServiceToken != "" {
+		t.Fatalf("err=%v url=%q: without the variables the reader is off", err, c.CommercialReservationURL)
+	}
+	env := valid()
+	env["COMMERCIAL_RESERVATION_BASE_URL"], env["SERVICE_TOKEN"] = "http://api-commercial-reservation:8080/", "svc-token"
+	c, err = load(env)
+	if err != nil || c.CommercialReservationURL != "http://api-commercial-reservation:8080" || c.ServiceToken.Reveal() != "svc-token" || strings.Contains(c.ServiceToken.String(), "svc") {
+		t.Fatalf("err=%v config %+v", err, c)
+	}
+	cases := map[string]struct {
+		change func(map[string]string)
+		want   string
+	}{
+		"url without token": {func(e map[string]string) { delete(e, "SERVICE_TOKEN") }, "SERVICE_TOKEN"},
+		"token without url": {func(e map[string]string) { delete(e, "COMMERCIAL_RESERVATION_BASE_URL") }, "COMMERCIAL_RESERVATION_BASE_URL"},
+		"url with a path":   {func(e map[string]string) { e["COMMERCIAL_RESERVATION_BASE_URL"] = "http://api:8080/api" }, "COMMERCIAL_RESERVATION_BASE_URL"},
+		"url not http":      {func(e map[string]string) { e["COMMERCIAL_RESERVATION_BASE_URL"] = "ftp://api:8080" }, "COMMERCIAL_RESERVATION_BASE_URL"},
+	}
+	for name, tc := range cases {
+		env := valid()
+		env["COMMERCIAL_RESERVATION_BASE_URL"], env["SERVICE_TOKEN"] = "http://api:8080", "svc-token"
+		tc.change(env)
+		if _, err := load(env); err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "svc-token") {
+			t.Errorf("%s: error %v, want it to name %s and not print the token", name, err, tc.want)
+		}
+	}
+}
