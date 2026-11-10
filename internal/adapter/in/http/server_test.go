@@ -324,3 +324,16 @@ func TestU_the_public_key_is_read_from_pem_and_weak_keys_are_refused(t *testing.
 		t.Fatal("a 1024-bit key was accepted")
 	}
 }
+
+// HU-SEC-007 part C, notifications spec 002, AC-WK4-02.1: the route takes the notice of an emergency access like any other event.
+func TestC_emergency_notice_sends_one_email_and_answers_201(t *testing.T) {
+	n := &fakeNotifier{outcome: usecase.Sent}
+	srv := newServer(t, n)
+	body := strings.Replace(envelope, `"eventType":"PasswordReset"`, `"eventType":"EmergencyAccessNoticeRequested"`, 1)
+	if res := post(t, tenantRoute(srv), serviceToken(t), body); res.StatusCode != http.StatusCreated {
+		t.Fatalf("status %d, want 201", res.StatusCode)
+	}
+	if len(n.got) != 1 || n.got[0].Type != "EmergencyAccessNoticeRequested" || n.got[0].TenantID != tenantID {
+		t.Fatalf("the use case got %+v", n.got)
+	}
+}
