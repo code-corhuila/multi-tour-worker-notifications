@@ -93,3 +93,30 @@ func TestA_an_invalid_emergency_notice_is_a_failure_and_sends_nothing(t *testing
 		}
 	}
 }
+
+// The facts of security carry the instants with microseconds (`2026-11-10T15:48:51.123456Z`): that is the format the notice really gets.
+func TestA_an_emergency_notice_with_the_microseconds_security_writes_is_sent(t *testing.T) {
+	m := &fakeMailer{}
+	payload := strings.Replace(strings.Replace(closedNotice, "15:48:51Z", "15:48:51.123456Z", 1), "17:20:00Z", "17:20:00.654321Z", 1)
+	if got, err := newNotify(m).Handle(context.Background(), noticeEvent("n7", payload)); err != nil || got != usecase.Sent {
+		t.Fatalf("outcome %v, err %v", got, err)
+	}
+	if !strings.Contains(m.sent[0].HTMLBody, "Inicio: 10/11/2026 10:48") || !strings.Contains(m.sent[0].HTMLBody, "Fin: 10/11/2026 12:20") {
+		t.Fatalf("the instants are not in the body:\n%s", m.sent[0].HTMLBody)
+	}
+}
+
+// AC-WK4-02.4: even if a statement or a justification of the sensitive data reached the event, nothing of it reaches the body.
+func TestA_what_the_notice_does_not_list_never_reaches_the_body_even_if_the_event_carries_it(t *testing.T) {
+	m := &fakeMailer{}
+	payload := strings.Replace(openedNotice, `"authorizationId":"a1"`,
+		`"statement":"declaracion-secreta-xyz","sensitiveReason":"justificacion-sensible-xyz","password":"clave-xyz","link":"https://example.test/x"`, 1)
+	if _, err := newNotify(m).Handle(context.Background(), noticeEvent("n8", payload)); err != nil {
+		t.Fatal(err)
+	}
+	for _, leaked := range []string{"declaracion-secreta-xyz", "justificacion-sensible-xyz", "clave-xyz", "https://example.test"} {
+		if strings.Contains(m.sent[0].HTMLBody, leaked) || strings.Contains(m.sent[0].Subject, leaked) {
+			t.Errorf("the notice carries %q", leaked)
+		}
+	}
+}
