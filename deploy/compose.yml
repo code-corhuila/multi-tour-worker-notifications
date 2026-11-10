@@ -21,6 +21,9 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required, set it in env/<environment>.env}
       JWT_ISSUER: ${JWT_ISSUER:-multi-tour-security}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-multi-tour}
+      # Customer notices (HU-COM-015): where the content of a notice is read and the SERVICE token to read it. Both or neither; the token is a secret of the environment.
+      COMMERCIAL_RESERVATION_BASE_URL: ${COMMERCIAL_RESERVATION_BASE_URL:-}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
     expose: ["8080"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
