@@ -40,6 +40,8 @@ See `.env.example`; every variable is read at start and a bad one stops the work
 | `SMTP_REQUIRE_TLS` | `true` | Outside development the connection must be TLS; only Mailpit in development turns it off |
 | `SMTP_TIMEOUT` | `10s` | Time allowed to one send |
 | `HTTP_ADDR` | `:8080` | Where `/health` listens |
+| `JWT_PUBLIC_KEY` or `JWT_PUBLIC_KEY_FILE` | none, one required | Public key of the security service (PEM; inline, line breaks as backslash-n; `deploy/compose.yml` passes only the inline one). The worker checks the token of every call itself and never holds the private key |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | `multi-tour-security`, `multi-tour` | Issuer and audience the token must carry |
 
 ## Development
 
