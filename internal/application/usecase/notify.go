@@ -67,7 +67,13 @@ func NewNotify(mailer out.Mailer, log *slog.Logger) *Notify {
 
 // Handle sends the notice of the event. An error means nothing was recorded as handled, so a retry sends it.
 func (n *Notify) Handle(ctx context.Context, e Event) (Outcome, error) {
-	if e.Type != "PasswordReset" {
+	var handle func(context.Context, Event) (Outcome, error)
+	switch e.Type {
+	case "PasswordReset":
+		handle = n.passwordReset
+	case "EmergencyAccessNoticeRequested":
+		handle = n.emergencyNotice
+	default:
 		return 0, fmt.Errorf("%w: %s", ErrUnknownType, e.Type)
 	}
 	if e.ID == "" {
@@ -78,7 +84,7 @@ func (n *Notify) Handle(ctx context.Context, e Event) (Outcome, error) {
 	if n.seen.has(e.ID) {
 		return Repeated, nil
 	}
-	outcome, err := n.passwordReset(ctx, e)
+	outcome, err := handle(ctx, e)
 	if err != nil {
 		return 0, err
 	}
@@ -123,5 +129,52 @@ func (n *Notify) passwordReset(ctx context.Context, e Event) (Outcome, error) {
 		return 0, fmt.Errorf("send password reset notice: %w", err)
 	}
 	n.log.InfoContext(ctx, "password reset notice sent", "eventId", e.ID, "tenantId", e.TenantID)
+	return Sent, nil
+}
+
+// emergencyNotice sends the notice that an emergency access to a tenant opened or ended to one of its Administrators (HU-SEC-007 part C, notifications
+// spec 002). Everything the e-mail shows is checked first, and a value that ends in a header is a bare address or a name with no line break.
+func (n *Notify) emergencyNotice(ctx context.Context, e Event) (Outcome, error) {
+	var p struct {
+		Kind                  string    `json:"kind"`
+		RecipientEmail        string    `json:"recipientEmail"`
+		TenantName            string    `json:"tenantName"`
+		PlatformAdministrator string    `json:"platformAdministrator"`
+		Reason                string    `json:"reason"`
+		Scope                 []string  `json:"scope"`
+		IncludesSensitiveData bool      `json:"includesSensitiveData"`
+		StartedAt             time.Time `json:"startedAt"`
+		EndedAt               time.Time `json:"endedAt"`
+	}
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return 0, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+	}
+	if p.Kind != templates.NoticeOpened && p.Kind != templates.NoticeClosed {
+		return 0, fmt.Errorf("%w: kind is not OPENED or CLOSED", ErrInvalidPayload)
+	}
+	if p.RecipientEmail == "" || p.PlatformAdministrator == "" || p.Reason == "" || p.StartedAt.IsZero() || (p.Kind == templates.NoticeClosed && p.EndedAt.IsZero()) {
+		return 0, fmt.Errorf("%w: recipientEmail, platformAdministrator, reason, startedAt and, to close, endedAt are required", ErrInvalidPayload)
+	}
+	if a, err := mail.ParseAddress(p.RecipientEmail); err != nil || a.Address != p.RecipientEmail {
+		return 0, fmt.Errorf("%w: recipientEmail is not one bare address", ErrInvalidPayload)
+	}
+	sender := p.TenantName
+	if sender == "" {
+		sender = platformSender
+	}
+	if strings.ContainsAny(sender, "\r\n") {
+		return 0, fmt.Errorf("%w: tenantName has a line break", ErrInvalidPayload)
+	}
+	subject, body, err := templates.EmergencyNotice(templates.EmergencyNoticeData{
+		Kind: p.Kind, TenantName: sender, PlatformAdministrator: p.PlatformAdministrator, Reason: p.Reason, Areas: p.Scope,
+		IncludesSensitiveData: p.IncludesSensitiveData, StartedAt: p.StartedAt, EndedAt: p.EndedAt,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if err := n.mailer.Send(ctx, out.Message{FromName: sender, To: p.RecipientEmail, Subject: subject, HTMLBody: body}); err != nil {
+		return 0, fmt.Errorf("send emergency access notice: %w", err)
+	}
+	n.log.InfoContext(ctx, "emergency access notice sent", "eventId", e.ID, "tenantId", e.TenantID, "kind", p.Kind)
 	return Sent, nil
 }

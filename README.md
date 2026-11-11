@@ -26,7 +26,7 @@ Full policy: `00-governance/branching-policy.md` in `multi-tour-docs`.
 
 ## What it does
 
-Job 4 sends the business e-mail of the platform. It has no schedule: job 7 (`multi-tour-worker-event-relay`) delivers the notification events to its internal routes, and it turns each into an e-mail over SMTP (ADR-004 D3, D10). It has no database and calls no domain; a failed send never changes business state. The first notice is the one of a reset administrative password (HU-WRK-004, spec `001-hu-wrk-004-send-the-password-reset-notice` in `multi-tour-docs`).
+Job 4 sends the business e-mail of the platform. It has no schedule: job 7 (`multi-tour-worker-event-relay`) delivers the notification events to its internal routes, and it turns each into an e-mail over SMTP (ADR-004 D3, D10). It has no database and calls no domain; a failed send never changes business state. The first notice is the one of a reset administrative password (HU-WRK-004, spec `001-hu-wrk-004-send-the-password-reset-notice` in `multi-tour-docs`). The second is the notice that an emergency access to a tenant opened or ended, one e-mail for each active Tenant Administrator (HU-SEC-007, event `EmergencyAccessNoticeRequested`, spec `002-hu-sec-007-send-the-emergency-access-notice` in `multi-tour-docs`). The record of the events already handled is kept in memory, so a restart forgets it.
 
 ## Variables
 

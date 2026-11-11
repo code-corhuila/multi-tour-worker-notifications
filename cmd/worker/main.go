@@ -12,7 +12,6 @@ import (
 
 	"github.com/code-corhuila/multi-tour-worker-runtime/logging"
 
-	httpin "github.com/code-corhuila/multi-tour-worker-notifications/internal/adapter/in/http"
 	"github.com/code-corhuila/multi-tour-worker-notifications/internal/config"
 )
 
@@ -38,7 +37,11 @@ func run() error {
 		return err
 	}
 	log := logging.New(os.Stdout)
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: httpin.NewMux(), ReadHeaderTimeout: readHeaderTimeout,
+	handler, err := newHandler(cfg, log)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: readHeaderTimeout,
 		WriteTimeout: writeTimeout, IdleTimeout: idleTimeout}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
