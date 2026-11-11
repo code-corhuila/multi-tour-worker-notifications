@@ -22,7 +22,14 @@ const (
 	maxBodyBytes  = 64 << 10
 )
 
-var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var (
+	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	// addressPattern finds an e-mail address in the text of a server: a reply such as "550 no such user a@b.test" repeats it.
+	addressPattern = regexp.MustCompile(`[^\s<>"',;]+@[^\s<>"',;]+`)
+)
+
+// withoutAddresses keeps the cause for the log but not the person it was about.
+func withoutAddresses(text string) string { return addressPattern.ReplaceAllString(text, "<address>") }
 
 // Notifier is what the routes need from the use case, so a test can replace it.
 type Notifier interface {
@@ -98,7 +105,7 @@ func (h *handler) deliver(w http.ResponseWriter, r *http.Request) {
 
 // fail answers with a message that names no driver, address or server; the cause goes to the log under the trace id.
 func (h *handler) fail(w http.ResponseWriter, r *http.Request, e usecase.Event, status int, code, message string, cause error) {
-	h.log.ErrorContext(r.Context(), "event not delivered", "traceId", correlation.From(r.Context()), "eventId", e.ID, "error", cause.Error())
+	h.log.ErrorContext(r.Context(), "event not delivered", "traceId", correlation.From(r.Context()), "eventId", e.ID, "error", withoutAddresses(cause.Error()))
 	writeError(w, r, status, code, message)
 }
 
