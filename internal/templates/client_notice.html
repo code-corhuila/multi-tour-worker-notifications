@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="es">
+<body>
+<p>Hola {{.Name}},</p>
+<p>{{.Headline}}</p>
+{{if or .Tour .Departure .Amount .Balance}}<p>
+{{if .Tour}}Tour: {{.Tour}}<br>{{end}}
+{{if .Departure}}Salida: {{.Departure}} (hora de Colombia)<br>{{end}}
+{{if .Amount}}Monto: {{.Amount}}<br>{{end}}
+{{if .Balance}}Saldo pendiente: {{.Balance}}<br>{{end}}
+</p>{{end}}
+<p>{{.Next}}</p>
+<p>Este mensaje no incluye enlaces ni datos de acceso. Si tienes dudas, responde con el equipo que te atendió.</p>
+<p>— Multitour</p>
+</body>
+</html>

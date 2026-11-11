@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,9 @@ type Notifications struct {
 	JWTPublicKeyFile string
 	JWTIssuer        string
 	JWTAudience      string
+	// CommercialReservationURL and ServiceToken let job 4 read the content of a customer notice (HU-COM-015); both empty leave that notice off.
+	CommercialReservationURL string
+	ServiceToken             runtimeconfig.Secret
 }
 
 // LoadNotifications reads the variables through getenv. Anything missing or malformed stops the worker at start; an error
@@ -76,6 +80,9 @@ func LoadNotifications(getenv func(string) string) (Notifications, error) {
 		return Notifications{}, fmt.Errorf("JWT_PUBLIC_KEY or JWT_PUBLIC_KEY_FILE is required")
 	}
 	c.JWTIssuer, c.JWTAudience = valueOr(getenv("JWT_ISSUER"), "multi-tour-security"), valueOr(getenv("JWT_AUDIENCE"), "multi-tour")
+	if err := loadNoticeReader(getenv, &c); err != nil {
+		return Notifications{}, err
+	}
 	return c, nil
 }
 
@@ -84,4 +91,26 @@ func valueOr(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// loadNoticeReader reads where job 4 asks for the content of a customer notice and the service token it asks with (HU-COM-015). Both come
+// together, or neither: the notices of a reset and of an emergency access need neither. A customer notice without them ends failed, visible.
+func loadNoticeReader(getenv func(string) string, c *Notifications) error {
+	raw := strings.TrimRight(getenv("COMMERCIAL_RESERVATION_BASE_URL"), "/")
+	c.ServiceToken = runtimeconfig.Secret(getenv("SERVICE_TOKEN"))
+	switch {
+	case raw == "" && c.ServiceToken == "":
+		return nil
+	case raw == "":
+		return fmt.Errorf("COMMERCIAL_RESERVATION_BASE_URL is required when SERVICE_TOKEN is set")
+	case c.ServiceToken == "":
+		return fmt.Errorf("SERVICE_TOKEN is required when COMMERCIAL_RESERVATION_BASE_URL is set")
+	}
+	// Only scheme://host[:port]: credentials, a query, a fragment or a path would reach every request.
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+		return fmt.Errorf("COMMERCIAL_RESERVATION_BASE_URL must be an http(s) url with only scheme, host and port")
+	}
+	c.CommercialReservationURL = raw
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/mail"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -30,6 +31,8 @@ const (
 var (
 	ErrUnknownType    = errors.New("no template for this event type")
 	ErrInvalidPayload = errors.New("the payload lacks what the notice needs")
+	// ErrContentUnavailable is answered as a failure too: a customer notice cannot be written without its content.
+	ErrContentUnavailable = errors.New("the content of the customer notices cannot be read")
 )
 
 // Event is what job 7 delivers: the envelope of ADR-004 D4 without the fields the notices do not use.
@@ -58,6 +61,8 @@ type Notify struct {
 	mailer out.Mailer
 	log    *slog.Logger
 	seen   *seen
+	// notices reads the content of a customer notice; nil when the worker has no address of commercial-reservation.
+	notices out.NoticeReader
 }
 
 // NewNotify returns the job over its only dependency, the mailer.
@@ -71,6 +76,8 @@ func (n *Notify) Handle(ctx context.Context, e Event) (Outcome, error) {
 	switch e.Type {
 	case "PasswordReset":
 		handle = n.passwordReset
+	case "ClientNotified":
+		handle = n.clientNotice
 	case "EmergencyAccessNoticeRequested":
 		handle = n.emergencyNotice
 	default:
@@ -178,3 +185,44 @@ func (n *Notify) emergencyNotice(ctx context.Context, e Event) (Outcome, error) 
 	n.log.InfoContext(ctx, "emergency access notice sent", "eventId", e.ID, "tenantId", e.TenantID, "kind", p.Kind)
 	return Sent, nil
 }
+
+// WithNotices gives the job the reader of the content of the customer notices (HU-COM-015); without it a ClientNotified event is a failure.
+func (n *Notify) WithNotices(reader out.NoticeReader) *Notify {
+	n.notices = reader
+	return n
+}
+
+// clientNotice sends the e-mail of one customer notice (HU-COM-015). The event carries no personal datum (AC-15.8): the recipient and the
+// variables of the template are read at send time from the service that owns the notice, with the tenant of the event in the path (AC-15.9).
+// Neither the content nor the address reaches a log (AC-15.13); the log holds the event, the tenant and the type.
+func (n *Notify) clientNotice(ctx context.Context, e Event) (Outcome, error) {
+	if n.notices == nil {
+		return 0, fmt.Errorf("%w: COMMERCIAL_RESERVATION_BASE_URL and SERVICE_TOKEN are not set", ErrContentUnavailable)
+	}
+	if !uuidPattern.MatchString(e.TenantID) || !uuidPattern.MatchString(e.ID) {
+		return 0, fmt.Errorf("%w: the tenant and the event must be identifiers", ErrInvalidPayload)
+	}
+	content, err := n.notices.Read(ctx, e.TenantID, e.ID)
+	if err != nil {
+		return 0, err
+	}
+	// The address ends in a header of the message: one bare address and no line break, so nothing can add a header.
+	if a, err := mail.ParseAddress(content.RecipientEmail); err != nil || a.Address != content.RecipientEmail {
+		return 0, fmt.Errorf("%w: recipientEmail is not one bare address", ErrInvalidPayload)
+	}
+	subject, body, err := templates.ClientNotice(templates.ClientNoticeData{Type: content.NotificationType, RecipientName: content.RecipientName,
+		TourName: content.TourName, DepartureStartsAt: content.DepartureStartsAt, AmountCents: content.AmountCents, PendingBalanceCents: content.PendingBalanceCents})
+	if errors.Is(err, templates.ErrUnknownNotice) {
+		return 0, fmt.Errorf("%w: %s", ErrUnknownType, content.NotificationType)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if err := n.mailer.Send(ctx, out.Message{FromName: platformSender, To: content.RecipientEmail, Subject: subject, HTMLBody: body}); err != nil {
+		return 0, fmt.Errorf("send customer notice: %w", err)
+	}
+	n.log.InfoContext(ctx, "customer notice sent", "eventId", e.ID, "tenantId", e.TenantID, "notificationType", content.NotificationType)
+	return Sent, nil
+}
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
