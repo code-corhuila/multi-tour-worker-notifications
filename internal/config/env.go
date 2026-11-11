@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/mail"
 	"strconv"
+	"strings"
 	"time"
 
 	runtimeconfig "github.com/code-corhuila/multi-tour-worker-runtime/config"
@@ -22,6 +23,12 @@ type Notifications struct {
 	RequireTLS  bool
 	SMTPTimeout time.Duration
 	HTTPAddr    string
+	// JWTPublicKey (PEM, as the value of the variable) or JWTPublicKeyFile (a path) is the public key of the security service;
+	// the worker checks the token of every call itself (ADR-004 D5). Issuer and audience are the platform's unless set.
+	JWTPublicKey     string
+	JWTPublicKeyFile string
+	JWTIssuer        string
+	JWTAudience      string
 }
 
 // LoadNotifications reads the variables through getenv. Anything missing or malformed stops the worker at start; an error
@@ -62,5 +69,19 @@ func LoadNotifications(getenv func(string) string) (Notifications, error) {
 	if s := getenv("HTTP_ADDR"); s != "" {
 		c.HTTPAddr = s
 	}
+	// An environment file holds the key on one line with the line breaks written as backslash-n.
+	c.JWTPublicKey = strings.ReplaceAll(getenv("JWT_PUBLIC_KEY"), `\n`, "\n")
+	c.JWTPublicKeyFile = getenv("JWT_PUBLIC_KEY_FILE")
+	if c.JWTPublicKey == "" && c.JWTPublicKeyFile == "" {
+		return Notifications{}, fmt.Errorf("JWT_PUBLIC_KEY or JWT_PUBLIC_KEY_FILE is required")
+	}
+	c.JWTIssuer, c.JWTAudience = valueOr(getenv("JWT_ISSUER"), "multi-tour-security"), valueOr(getenv("JWT_AUDIENCE"), "multi-tour")
 	return c, nil
+}
+
+func valueOr(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }

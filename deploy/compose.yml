@@ -16,6 +16,11 @@ services:
       SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-true}
       SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10s}
       HTTP_ADDR: ${HTTP_ADDR:-:8080}
+      # The public key of the security service, on one line with the line breaks written as backslash-n (env/<environment>.env):
+      # this worker checks the token of every call itself (ADR-004 D5). It never holds the private key.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required, set it in env/<environment>.env}
+      JWT_ISSUER: ${JWT_ISSUER:-multi-tour-security}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-multi-tour}
     expose: ["8080"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]

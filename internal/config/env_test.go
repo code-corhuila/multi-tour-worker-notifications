@@ -10,7 +10,7 @@ import (
 
 // valid is the smallest environment that starts the worker.
 func valid() map[string]string {
-	return map[string]string{"SMTP_HOST": "mailpit", "SMTP_PORT": "1025", "SMTP_FROM": "no-reply@multitour.local"}
+	return map[string]string{"SMTP_HOST": "mailpit", "SMTP_PORT": "1025", "SMTP_FROM": "no-reply@multitour.local", "JWT_PUBLIC_KEY": pemOneLine}
 }
 
 func load(env map[string]string) (config.Notifications, error) {
