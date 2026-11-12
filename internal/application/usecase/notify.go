@@ -76,6 +76,8 @@ func (n *Notify) Handle(ctx context.Context, e Event) (Outcome, error) {
 	switch e.Type {
 	case "PasswordReset":
 		handle = n.passwordReset
+	case "PasswordResetFailed":
+		handle = n.passwordResetFailed
 	case "ClientNotified":
 		handle = n.clientNotice
 	case "EmergencyAccessNoticeRequested":
@@ -117,16 +119,9 @@ func (n *Notify) passwordReset(ctx context.Context, e Event) (Outcome, error) {
 	if p.Email == "" || p.ResetAt.IsZero() {
 		return 0, fmt.Errorf("%w: email and resetAt are required", ErrInvalidPayload)
 	}
-	// Both values end in a header of the message: a bare address and no line break, so nothing can add a header.
-	if a, err := mail.ParseAddress(p.Email); err != nil || a.Address != p.Email {
-		return 0, fmt.Errorf("%w: email is not one bare address", ErrInvalidPayload)
-	}
-	sender := p.TenantName
-	if sender == "" {
-		sender = platformSender
-	}
-	if strings.ContainsAny(sender, "\r\n") {
-		return 0, fmt.Errorf("%w: tenantName has a line break", ErrInvalidPayload)
+	sender, err := senderOf(p.Email, p.TenantName)
+	if err != nil {
+		return 0, err
 	}
 	subject, body, err := templates.PasswordReset(templates.PasswordResetData{TenantName: sender, ResetAt: p.ResetAt})
 	if err != nil {
@@ -226,3 +221,53 @@ func (n *Notify) clientNotice(ctx context.Context, e Event) (Outcome, error) {
 }
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// senderOf checks the two values that end in a header of the message, a bare address and a name with no line break, so nothing can add a
+// header, and gives the sender: the tenant's name, or the platform's when the account has none.
+func senderOf(email, tenantName string) (string, error) {
+	if a, err := mail.ParseAddress(email); err != nil || a.Address != email {
+		return "", fmt.Errorf("%w: email is not one bare address", ErrInvalidPayload)
+	}
+	sender := tenantName
+	if sender == "" {
+		sender = platformSender
+	}
+	if strings.ContainsAny(sender, "\r\n") {
+		return "", fmt.Errorf("%w: tenantName has a line break", ErrInvalidPayload)
+	}
+	return sender, nil
+}
+
+// passwordResetFailed tells the owner of an administrative account that a reset of its password was tried and did not complete (notifications spec 003).
+// The reason and the rest of the payload never reach the e-mail.
+func (n *Notify) passwordResetFailed(ctx context.Context, e Event) (Outcome, error) {
+	var p struct {
+		Email      string    `json:"email"`
+		TenantName string    `json:"tenantName"`
+		Roles      []string  `json:"roles"`
+		FailedAt   time.Time `json:"failedAt"`
+	}
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return 0, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+	}
+	if !slices.Contains(p.Roles, roleTenantAdministrator) && !slices.Contains(p.Roles, rolePlatformAdministrator) {
+		n.log.InfoContext(ctx, "failed reset of a non-administrative account: no e-mail", "eventId", e.ID)
+		return NotNeeded, nil
+	}
+	if p.Email == "" || p.FailedAt.IsZero() {
+		return 0, fmt.Errorf("%w: email and failedAt are required", ErrInvalidPayload)
+	}
+	sender, err := senderOf(p.Email, p.TenantName)
+	if err != nil {
+		return 0, err
+	}
+	subject, body, err := templates.PasswordResetFailed(templates.PasswordResetFailedData{TenantName: sender, FailedAt: p.FailedAt})
+	if err != nil {
+		return 0, err
+	}
+	if err := n.mailer.Send(ctx, out.Message{FromName: sender, To: p.Email, Subject: subject, HTMLBody: body}); err != nil {
+		return 0, fmt.Errorf("send failed password reset notice: %w", err)
+	}
+	n.log.InfoContext(ctx, "failed password reset notice sent", "eventId", e.ID, "tenantId", e.TenantID)
+	return Sent, nil
+}
