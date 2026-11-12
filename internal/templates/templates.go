@@ -17,9 +17,10 @@ import (
 var files embed.FS
 
 var (
-	passwordReset   = template.Must(template.ParseFS(files, "password_reset.html"))
-	emergencyAccess = template.Must(template.ParseFS(files, "emergency_access.html"))
-	clientNotice    = template.Must(template.ParseFS(files, "client_notice.html"))
+	passwordReset       = template.Must(template.ParseFS(files, "password_reset.html"))
+	passwordResetFailed = template.Must(template.ParseFS(files, "password_reset_failed.html"))
+	emergencyAccess     = template.Must(template.ParseFS(files, "emergency_access.html"))
+	clientNotice        = template.Must(template.ParseFS(files, "client_notice.html"))
 )
 
 // colombia has no daylight saving, so a fixed offset is exact and needs no tzdata in the image.
@@ -39,6 +40,22 @@ func PasswordReset(d PasswordResetData) (subject, body string, err error) {
 		return "", "", fmt.Errorf("render password reset notice: %w", err)
 	}
 	return "Se restableció la contraseña de tu cuenta", b.String(), nil
+}
+
+// PasswordResetFailedData is all the notice of a failed reset shows: never the reason of the refusal, the account or a code.
+type PasswordResetFailedData struct {
+	TenantName string
+	FailedAt   time.Time
+}
+
+// PasswordResetFailed renders the notice that a reset of the password of an administrative account was tried and did not complete.
+func PasswordResetFailed(d PasswordResetFailedData) (subject, body string, err error) {
+	var b bytes.Buffer
+	view := struct{ TenantName, FailedAt string }{d.TenantName, d.FailedAt.In(colombia).Format("02/01/2006 15:04")}
+	if err := passwordResetFailed.Execute(&b, view); err != nil {
+		return "", "", fmt.Errorf("render failed password reset notice: %w", err)
+	}
+	return "Intentaron restablecer la contraseña de tu cuenta", b.String(), nil
 }
 
 // The two kinds of the notice of an emergency access (HU-SEC-007 part C, notifications spec 002).
