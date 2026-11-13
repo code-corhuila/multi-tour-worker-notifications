@@ -337,3 +337,16 @@ func TestC_emergency_notice_sends_one_email_and_answers_201(t *testing.T) {
 		t.Fatalf("the use case got %+v", n.got)
 	}
 }
+
+// Notifications spec 003, AC-WK4-03.1: the route takes the failed reset like any other event.
+func TestC_failed_reset_sends_one_email_and_answers_201(t *testing.T) {
+	n := &fakeNotifier{outcome: usecase.Sent}
+	srv := newServer(t, n)
+	body := strings.Replace(envelope, `"eventType":"PasswordReset"`, `"eventType":"PasswordResetFailed"`, 1)
+	if res := post(t, tenantRoute(srv), serviceToken(t), body); res.StatusCode != http.StatusCreated {
+		t.Fatalf("status %d, want 201", res.StatusCode)
+	}
+	if len(n.got) != 1 || n.got[0].Type != "PasswordResetFailed" || n.got[0].TenantID != tenantID {
+		t.Fatalf("the use case got %+v", n.got)
+	}
+}
