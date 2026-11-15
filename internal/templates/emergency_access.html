@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+<body>
+<p>Hola,</p>
+{{if .Closed}}<p>Terminó el acceso de emergencia que el equipo de Multitour tenía a <strong>{{.TenantName}}</strong>.</p>{{else}}<p>El equipo de Multitour abrió un acceso de emergencia a <strong>{{.TenantName}}</strong>.</p>{{end}}
+<ul>
+<li>Quién: {{.PlatformAdministrator}}</li>
+<li>Motivo: {{.Reason}}</li>
+<li>Alcance: {{.Areas}}</li>
+<li>Datos sensibles: {{.Sensitive}}</li>
+<li>Inicio: {{.StartedAt}} (hora de Colombia)</li>
+{{if .Closed}}<li>Fin: {{.EndedAt}} (hora de Colombia)</li>{{end}}
+</ul>
+{{if .Closed}}<p>El acceso ya no está activo y quedó registrado en la auditoría.</p>{{else}}<p>Un acceso de emergencia dura como máximo 24 horas y queda registrado en la auditoría. Si no lo esperabas, avisa de inmediato al equipo de Multitour.</p>{{end}}
+<p>Por seguridad, este mensaje no incluye contraseñas ni enlaces.</p>
+<p>— {{.TenantName}}</p>
+</body>
+</html>

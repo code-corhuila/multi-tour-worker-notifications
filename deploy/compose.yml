@@ -1,0 +1,38 @@
+# The worker has no database and no volume, and publishes no port: job 7 reaches it by its name on the platform network, and the
+# root composition (multi-tour-infra-postgres) includes this file. The captured mail of development is read in the Mailpit of that
+# composition (service mailpit, profile mail-capture), which the security service already declares: a second one here would clash.
+services:
+  worker-notifications:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      # No default: a wrong guess of the server must fail visibly (the worker stops at start naming the variable).
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is required, set it in env/<environment>.env}
+      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT is required, set it in env/<environment>.env}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required, set it in env/<environment>.env}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-true}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10s}
+      HTTP_ADDR: ${HTTP_ADDR:-:8080}
+      # The public key of the security service, on one line with the line breaks written as backslash-n (env/<environment>.env):
+      # this worker checks the token of every call itself (ADR-004 D5). It never holds the private key.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required, set it in env/<environment>.env}
+      JWT_ISSUER: ${JWT_ISSUER:-multi-tour-security}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-multi-tour}
+      # Customer notices (HU-COM-015): where the content of a notice is read and the SERVICE token to read it. Both or neither; the token is a secret of the environment.
+      COMMERCIAL_RESERVATION_BASE_URL: ${COMMERCIAL_RESERVATION_BASE_URL:-}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+    expose: ["8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    networks: [platform]
+
+networks:
+  platform:
+    external: true
