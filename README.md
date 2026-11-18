@@ -5,6 +5,18 @@
 Part of the **Multi Tour** distributed system — team `multi-tour`, Grupo 2.
 Governance and documentation live in [`multi-tour-docs`](https://github.com/code-corhuila/multi-tour-docs).
 
+## What it is
+
+Job 4 of ADR-004 D3: e-mail notifications. It receives events from the event relay (job 7) on two internal routes, `POST /api/v1/notifications/internal/tenants/{tenantId}/events` and `POST /api/v1/notifications/internal/events`, checks the JWT of every call itself, and sends at most one e-mail per event over SMTP (customer notices read their content from `commercial-reservation` with a service token). It has no database and exposes `/health`.
+
+## How to start it
+
+Copy `.env.example` and fill the SMTP variables (in development `mailpit`, port 1025, which captures every e-mail and sends none), `JWT_PUBLIC_KEY` (the public key of `multi-tour-security` on one line) and, for customer notices, `COMMERCIAL_RESERVATION_BASE_URL` with `SERVICE_TOKEN`. `SMTP_REQUIRE_TLS=false` is for development only. The worker joins the external `platform` network and publishes no port, so `deploy/compose.yml` is run from the root composition of `multi-tour-infra-postgres`, which declares the Mailpit service (profile `mail-capture`).
+
+## How to test it
+
+`gofmt -l .` must print nothing, then `go vet ./...` and `go test ./...` (Go 1.26). The same run in `ci.yml` on pull requests to `develop` and `qa`, with a Mailpit service. The integration test needs a Mailpit: `docker run --rm -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.21.8` and `MAILPIT_SMTP=127.0.0.1:1025 MAILPIT_URL=http://127.0.0.1:8025 go test ./...`; without those variables that test is skipped (`internal/adapter/out/smtp/mailer_test.go`).
+
 ## Branching
 
 Three permanent branches. **None of them accepts a direct commit** — you enter through a child
