@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-18
+
+Minor release after 3.0.0. The entry below is a pull request merged into `qa` and re-applied to `release/3.1.0` with `git cherry-pick -x`; it names no user story, so it is grouped under the story of this component, and the entry is the title of the pull request without its type. The frozen head of `qa` is `27aeaeeb5b407e4b30ccf65a72864a590a5ff7cb`.
+
+### Changed
+
+#### HU-WRK-004 - Send business e-mail
+
+- Add how to start and test to the readme and the pr template ([PR 21](https://github.com/code-corhuila/multi-tour-worker-notifications/pull/21))
+
 ## [3.0.0] - 2026-11-14
 
 Cut 3 release. Every entry below is a pull request merged into `qa` and re-applied to `release/3.0.0` with `git cherry-pick -x`; the heading of each group is the user story named in the pull request, and the entry is the title of the pull request without its type. The frozen head of `qa` is `12e19c16e8b7d17f3ff5ade8308b02cb6251a110`.
@@ -21,5 +31,6 @@ Cut 3 release. Every entry below is a pull request merged into `qa` and re-appli
 - Send the failed password reset notice ([PR 16](https://github.com/code-corhuila/multi-tour-worker-notifications/pull/16))
 - Pin the worker runtime at its first version v0.1.0 ([PR 18](https://github.com/code-corhuila/multi-tour-worker-notifications/pull/18))
 
-[Unreleased]: https://github.com/code-corhuila/multi-tour-worker-notifications/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/code-corhuila/multi-tour-worker-notifications/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/code-corhuila/multi-tour-worker-notifications/releases/tag/v3.1.0
 [3.0.0]: https://github.com/code-corhuila/multi-tour-worker-notifications/releases/tag/v3.0.0
